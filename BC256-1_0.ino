@@ -1,7 +1,7 @@
 /*
  * MIT License
  *
- * Copyright (c) 2023 TheEccentricGenius
+ * Copyright (c) 2023 Abel Huxtable(TheEccentricGenius)
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -35,7 +35,8 @@
 /* WARNING: PORT control and AREF control is only enabled for ATmega328P */
 /* WARNING: EDIT won't restore your command if invalid command is put in */
 // NOTE: code currently is stable.
-// NOTE: 4 micros are consumed per instruction.
+// NOTE: ~3 micros are consumed per instruction.
+// 23/09/23: Corrected some incorrect Serial output.
 // 1/06/23: initial defines created for RAM and EEPROM control, a few minor flaws fixed.
 // 2/06/23: PORT and AREF disabled on all but ATmega328P, error checking for wrong memory sizes. 
 // 4/06/23: Millis and Micros implemented.
@@ -126,10 +127,10 @@ void loop() {
   if (String(buf) == F("AUTO")) {
     if (EEPROM.read(autorun_prog) == 90) {
       EEPROM.write(autorun_prog, 0);
-      Serial.println(F("Auto load & run on."));
+      Serial.println(F("Auto load & run off."));
     } else {
       EEPROM.write(autorun_prog, 90);
-      Serial.println(F("Auto load & run off."));
+      Serial.println(F("Auto load & run on."));
     }
   }
   else if (String(buf) == F("BENCH")) {
@@ -143,10 +144,10 @@ void loop() {
     hlp_B = EEPROM.read(term_setup);
     if (hlp_B & 0b00000001) {
       EEPROM.update(term_setup, (hlp_B & 0b11111110));
-      Serial.println(F("Input display off.")); 
+      Serial.println(F("Input display on.")); 
     } else {
       EEPROM.update(term_setup, (hlp_B | 0b00000001));
-      Serial.println(F("Input display on."));
+      Serial.println(F("Input display off."));
     }
     hlp_B = EEPROM.read(term_setup);
   }
@@ -1227,6 +1228,20 @@ run_prog:
           else if (pRAM[code + clrlp] == 2) {pinMode(clrlp, INPUT_PULLUP);}
         }
       }
+      goto run_prog;
+    instr_91: // => Fast output pin toggling
+      a = nxtc();
+      b = nxtc();
+      code = word(a, b);
+#if defined(__AVR_ATmega328P__) // Only enable control fast output toggling on ATmega328P
+  
+      if (pRAM[code] == 75) {
+        c = pRAM[code+1]; code += 2;
+        for (byte clrlp = 0; clrlp < c; clrlp++) {
+          
+        }
+      }
+#endif
       goto run_prog;
 }
 //#pragma GCC pop_options
