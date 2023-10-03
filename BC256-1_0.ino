@@ -30,13 +30,12 @@
 #pragma GCC optimize ("-O3")
 #pragma GCC push_options*/
 // ==================================================================
-// BC256 --Byte Code 256-- INSTRUCTIONS (1.0) "STABLE"
+// BC256 --Byte Code 256-- INSTRUCTIONS (1.7) "STABLE"
 // ==================================================================
 /* WARNING: PORT control and AREF control is only enabled for ATmega328P */
-/* WARNING: EDIT won't restore your command if invalid command is put in */
+/* WARNING: EDIT won't restore your command if invalid command is put in */ 
 // NOTE: code currently is stable.
 // NOTE: ~3 micros are consumed per instruction.
-// 23/09/23: Corrected some incorrect Serial output.
 // 1/06/23: initial defines created for RAM and EEPROM control, a few minor flaws fixed.
 // 2/06/23: PORT and AREF disabled on all but ATmega328P, error checking for wrong memory sizes. 
 // 4/06/23: Millis and Micros implemented.
@@ -55,6 +54,13 @@
 //           Error checking for MILLIS & MICROS overflowing stack. MSRFRSH & USRFRSH changed to MILLIS & MICROS.
 // 22/06/23: PNMDD added. which is pinmode for all the numbers in the array to do multiple pinmodes 0-19.
 //           Interpreter input format for ezy2rd displayed.
+// 23/09/23: Corrected some incorrect Serial output.
+// 2/10/23: Added CALL and RET, as this will simplify programs.
+// 3/10/23: Found a bug with EZY2RD, some invalid register letters specified and useless error checking.
+//          Corrected several list problems and fixed more bugs with program entering.
+//          Changed version number to 1.7 to reflect changes to code. Added warning for using EDIT.
+//          Fixed a bug with DEL being unable to delete code near the end of memory.
+//          Fixed bugs todo with INSERT and EDIT, due to incorrect usage of memcpy and memmove.
 
 #include <EEPROM.h>
 
@@ -64,10 +70,11 @@
 #define prevent_auto2   13
 
 // Set the size of memory. 
+/* WARNING => EEPROM_size can't exceed your boards total EEPROM space!  <= WARNING */
 /* WARNING => EEPROM_size plus stack_size can't exceed your boards total SRAM space!  <= WARNING */
 /* WARNING => stack_size MUST be at least 4 bytes! <= WARNING */
-#define EEPROM_size     1024  // 1024 by default.
-#define stack_size      256   // 256 by default.
+#define EEPROM_size     44  // 1024 by default.
+#define stack_size      8   // 256 by default.
 /* WARNING: DON'T CHANGE DEFINES BELOW HERE!  */
 #define ram_size        EEPROM_size + stack_size
 
@@ -118,7 +125,7 @@ void setup() {
   pinMode(prevent_auto2, INPUT);
   
   Serial.println(F("Welcome to BC256 --Byte Code 256-- interactive console."));
-  if (hlp_B & 0b10000000) {Serial.print(F("BC256 v1.0 EZY2RD-> "));} else {Serial.print(F("BC256 v1.0-> "));}
+  if (hlp_B & 0b10000000) {Serial.print(F("BC256 v1.7 EZY2RD-> "));} else {Serial.print(F("BC256 v1.7-> "));}
 }
 
 void loop() {
@@ -230,12 +237,12 @@ void loop() {
     } else {Serial.println(F("Program in memory to big for EEPROM."));}
   }
   else if (bufidx > 0) {process_input();}
-  if (hlp_B & 0b10000000) {Serial.print(F("BC256 v1.0 EZY2RD-> "));} else {Serial.print(F("BC256 v1.0-> "));}
+  if (hlp_B & 0b10000000) {Serial.print(F("BC256 v1.7 EZY2RD-> "));} else {Serial.print(F("BC256 v1.7-> "));}
   bufidx = 0;
 }
 
 // ==================================================================
-// BC256 --Byte Code 256-- INTERACTIVE (1.0) "STABLE"
+// BC256 --Byte Code 256-- INTERACTIVE (1.7) "STABLE"
 // ==================================================================
 const char instr_0[] PROGMEM = "STOP";
 const char instr_1[] PROGMEM = "MOVR"; // => reg=reg
@@ -328,18 +335,20 @@ const char instr_87[] PROGMEM = "PRINTDB"; // => Serial.print(byte_buf) buffer i
 const char instr_88[] PROGMEM = "JMPDE"; // => jump to address if data buffers are equal
 const char instr_89[] PROGMEM = "JMPDNE"; // => jump to address if data buffers aren't equal
 const char instr_90[] PROGMEM = "PNMDD"; // => Set data array size of pins to data specified output
+const char instr_91[] PROGMEM = "CALL"; // => jump to address and push address to stack
+const char instr_92[] PROGMEM = "RET"; // => pop address off stack and return
 const char* const instrlist[] PROGMEM = {
-  instr_0,instr_1,instr_2,instr_3,instr_4,instr_5,instr_6,instr_7,instr_8,instr_9,instr_10,instr_11,instr_12,instr_13,instr_14,instr_15,instr_16,instr_17,instr_18,instr_19,instr_20,instr_21,instr_22,instr_23,instr_24,instr_25,instr_26,instr_27,instr_28,instr_29, instr_30,instr_31,instr_32,instr_33,instr_34,instr_35,instr_36,instr_37,instr_38,instr_39,instr_40,instr_41,instr_42,instr_43,instr_44,instr_45,instr_46,instr_47,instr_48,instr_49,instr_50,instr_51,instr_52,instr_53,instr_54,instr_55,instr_56,instr_57,instr_58,instr_59,instr_60,instr_61,instr_62,instr_63,instr_64,instr_65,instr_66,instr_67,instr_68,instr_69,instr_70,instr_71,instr_72,instr_73,instr_74,instr_75,instr_76,instr_77,instr_78,instr_79,instr_80,instr_81,instr_82,instr_83,instr_84,instr_85,instr_86,instr_87,instr_88,instr_89,instr_90
+  instr_0,instr_1,instr_2,instr_3,instr_4,instr_5,instr_6,instr_7,instr_8,instr_9,instr_10,instr_11,instr_12,instr_13,instr_14,instr_15,instr_16,instr_17,instr_18,instr_19,instr_20,instr_21,instr_22,instr_23,instr_24,instr_25,instr_26,instr_27,instr_28,instr_29, instr_30,instr_31,instr_32,instr_33,instr_34,instr_35,instr_36,instr_37,instr_38,instr_39,instr_40,instr_41,instr_42,instr_43,instr_44,instr_45,instr_46,instr_47,instr_48,instr_49,instr_50,instr_51,instr_52,instr_53,instr_54,instr_55,instr_56,instr_57,instr_58,instr_59,instr_60,instr_61,instr_62,instr_63,instr_64,instr_65,instr_66,instr_67,instr_68,instr_69,instr_70,instr_71,instr_72,instr_73,instr_74,instr_75,instr_76,instr_77,instr_78,instr_79,instr_80,instr_81,instr_82,instr_83,instr_84,instr_85,instr_86,instr_87,instr_88,instr_89,instr_90,instr_91,instr_92
 };
 const byte params[] PROGMEM = {
 //0                  10                  20                  30                  40                  50                  60                  70                  80                  90
-//0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
-  0,2,2,1,2,2,2,2,2,2,2,2,2,2,2,1,1,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,0,1,1,2,1,1,1,1,2,2,2,2,2,2,2,2,2,2,1,2,2,1,1,1,1,1,1,1,0,2,2,1,1,1,1,1,1,2,2,2,2,1,1,1,1,1,1
+//0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2
+  0,2,2,1,2,2,2,2,2,2,2,2,2,2,2,1,1,0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,0,1,1,2,1,1,1,1,2,2,2,2,2,2,2,2,2,2,1,2,2,1,1,1,1,1,1,1,0,2,2,1,1,1,1,1,1,2,2,2,2,1,1,1,1,1,1,1,0
 };
 const byte regparams[] PROGMEM = {
 //0                  10                  20                  30                  40                  50                  60                  70                  80                  90
-//0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0
-  0,1,0,1,1,0,1,0,1,0,1,0,1,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,1,1,1,0,1,0,0,1,1,1,0,1,0,1,1,0,0,0,0,1,0,1,0,1,1,0,1,0,1,0,1,0,1,0,1,1,0,1,1,1,1,0,0,0,0,1,1,0,0,1,1,0,0,1,0,1,0,1,0,0,0,0,0
+//0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2
+  0,1,0,1,1,0,1,0,1,0,1,0,1,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,1,1,1,0,1,0,0,1,1,1,0,1,0,1,1,0,0,0,0,1,0,1,0,1,1,0,1,0,1,0,1,0,1,0,1,1,0,1,1,1,1,0,0,0,0,1,1,0,0,1,1,0,0,1,0,1,0,1,0,0,0,0,0,0,0
 };
 
 String getInstr(byte nb) {
@@ -365,7 +374,7 @@ void process_input() {
   code = 0;  
   while (String(buf2) != getInstr(code)) {
     code++; 
-    if (code > 90) {Serial.println(String(buf2) + F(" Isn't a valid instruction.")); return;}
+    if (code > 92) {Serial.println(String(buf2) + F(" Isn't a valid instruction.")); return;}
   }
   pRAM[addr++] = code;
   
@@ -381,16 +390,16 @@ void process_input() {
     memset(buf2, 0, 8);
     memcpy(buf2, buf+code, bufindex);
     
-    if (pRAM[addr-1] == 76 or pRAM[addr-1] == 71 or (pRAM[addr-1] >= 22 and pRAM[addr-1] <= 27) or (pRAM[addr-1] >= 45 and pRAM[addr-1] <= 46) or (pRAM[addr-1] >= 79 and pRAM[addr-1] <= 80) or (pRAM[addr-1] >= 86 and pRAM[addr-1] <= 90)) {pRAM[addr++] = atoi(buf2) >> 8;}
+    if (pRAM[addr-1] == 76 or pRAM[addr-1] == 71 or (pRAM[addr-1] >= 22 and pRAM[addr-1] <= 27) or (pRAM[addr-1] >= 45 and pRAM[addr-1] <= 46) or (pRAM[addr-1] >= 79 and pRAM[addr-1] <= 80) or (pRAM[addr-1] >= 86 and pRAM[addr-1] <= 91)) {pRAM[addr++] = atoi(buf2) >> 8;}
     if (hlp_B & 0b10000000 and hasregs) {
-      if((buf2[1] - 65) > 10) {
+      if(buf2[1] < 'A' or buf2[1] > 'K') {
         Serial.print(F("Invalid register "));
         Serial.print(buf2);
-        Serial.println(F(", valid registers are rA to rF.")); 
+        Serial.println(F(", valid registers are rA to rK.")); 
         addr--; 
         return;
       }
-      pRAM[addr++] = (buf2[1] - 65) & 0xFF;
+      pRAM[addr++] = (buf2[1] - 65);
     } else {
       pRAM[addr++] = atoi(buf2) & 0xFF;
     }
@@ -399,20 +408,20 @@ void process_input() {
     memset(buf2, 0, 8);
     memcpy(buf2, buf+code, bufindex);
 
-    if (hlp_B & 0b10000000 and (pRAM[addr-2] != 34 or pRAM[addr-2] != 47)) {
+    if (hlp_B & 0b10000000 and (pRAM[addr-1] != 34 and pRAM[addr-1] != 47)) {
       if((buf2[1] - 65) > 5 or (buf2[1] - 65) < 0) {
         Serial.print(F("Invalid register "));
         Serial.print(buf2);
-        Serial.println(F(", valid registers are rA to rF.")); 
+        Serial.println(F(", valid registers are rA to rE.")); 
         addr--; 
         return;
       }
       pRAM[addr++] = (buf2[1] - 65);
     } else {
-      if(atoi(buf2) > 5 and (pRAM[addr-1] != 34 or pRAM[addr-1] != 47)) {
-        Serial.print(F("Invalid number "));
+      if(atoi(buf2) > 5 and (pRAM[addr-1] != 34 and pRAM[addr-1] != 47)) {
+        Serial.print(F("Invalid register number "));
         Serial.print(atoi(buf2));
-        Serial.println(F(", valid numbers are 0 to 5.")); 
+        Serial.println(F(", valid register numbers are 0 to 5.")); 
         addr--; 
         return;
       }
@@ -427,8 +436,8 @@ void process_input() {
     memset(buf2, 0, 8);
     memcpy(buf2, buf+code, bufindex);
 
-    if (hlp_B & 0b10000000) {
-      if((buf2[1] - 65) > 10 and hasregs) {
+    if (hlp_B & 0b10000000  and hasregs) {
+      if(buf2[1] < 'A' or buf2[1] > 'K') {
         Serial.print(F("Invalid register "));
         Serial.print(buf2);
         Serial.println(F(", valid registers are rA to rK.")); 
@@ -437,10 +446,10 @@ void process_input() {
       }
       pRAM[addr++] = (buf2[1] - 65);
     } else {
-      if(pRAM[addr] > 10 and hasregs) {
-        Serial.print(F("Invalid number "));
+      if(atoi(buf2) > 10 and hasregs) {
+        Serial.print(F("Invalid register number "));
         Serial.print(atoi(buf2));
-        Serial.println(F(", valid numbers are 0 to 10.")); 
+        Serial.println(F(", valid register numbers are 0 to 10.")); 
         addr-=2; 
         return;
       }
@@ -457,7 +466,7 @@ void process_input() {
     Serial.println(F("Memory overflow.")); 
     addr -= instrargs + 1;
     if(pRAM[addr-1] == 75) {addr -= pRAM[addr];}
-    if(pRAM[addr-1] == 76 or pRAM[addr-1] == 71 or (pRAM[addr-1] >= 22 and pRAM[addr-1] <= 27) or (pRAM[addr-1] >= 45 and pRAM[addr-1] <= 46) or (pRAM[addr-1] >= 79 and pRAM[addr-1] <= 80) or (pRAM[addr-1] >= 86 and pRAM[addr-1] <= 90)) {addr--;}
+    if(pRAM[addr-1] == 76 or pRAM[addr-1] == 71 or (pRAM[addr-1] >= 22 and pRAM[addr-1] <= 27) or (pRAM[addr-1] >= 45 and pRAM[addr-1] <= 46) or (pRAM[addr-1] >= 79 and pRAM[addr-1] <= 80) or (pRAM[addr-1] >= 86 and pRAM[addr-1] <= 91)) {addr--;}
   }
 }
 
@@ -476,7 +485,7 @@ void delete_add() {
     get_input();
     
     bufidx = code + 3;    
-    memmove(pRAM+bufidx, pRAM+code, addr);
+    memmove(pRAM+bufidx, pRAM+code, addr-code);
     pRAM[code] = 0; pRAM[code+1] = 0; pRAM[code+2] = 0;
 
     tmp_addr = addr;
@@ -492,14 +501,15 @@ void delete_add() {
       if (pRAM[tmp_code+1] > 2) {pRAM[code+2] = 0;}
     } else if (code >= (tmp_addr - addr)) {memcpy(pRAM+addr, pRAM+bufidx, code);}
     addr += code;
-  } else {
-    instrargs = pgm_read_byte_near(params+pRAM[code]);    
-    if (pRAM[code] == 76 or pRAM[code] == 71 or (pRAM[code] >= 22 and pRAM[code] <= 27) or (pRAM[code] >= 45 and pRAM[code] <= 46) or (pRAM[code] >= 79 and pRAM[code] <= 80) or (pRAM[code] >= 86 and pRAM[code] <= 90)) {instrargs++;}
+  } else {    
+    instrargs = pgm_read_byte_near(params+pRAM[code]);  
+    if (pRAM[code] == 76 or pRAM[code] == 71 or (pRAM[code] >= 22 and pRAM[code] <= 27) or (pRAM[code] >= 45 and pRAM[code] <= 46) or (pRAM[code] >= 79 and pRAM[code] <= 80) or (pRAM[code] >= 86 and pRAM[code] <= 91)) {instrargs++;}
     if (pRAM[code] == 75) {instrargs += pRAM[code+1];}
-    
-    bufindex = (code + instrargs) + 1;    
-    memcpy(pRAM+code, pRAM+bufindex, addr);
-    addr -= (instrargs + 1);
+
+    instrargs++;    
+    bufindex = code + instrargs;    
+    memcpy(pRAM+code, pRAM+bufindex, addr-bufindex);
+    addr -= instrargs;
   }
 }
 
@@ -526,7 +536,7 @@ void list_program(boolean instrinhex) {
       bufindex = pRAM[lstprog];
       memset(buf, 0, 16);
 
-      if (bufindex > 90) {bufindex = 44;}
+      if (bufindex > 92) {bufindex = 44;}
       
       if (!instrinhex) {memset(buf, 32, 8-strlen_P((char*)pgm_read_word(&(instrlist[bufindex]))));}
       else if (bufindex < 16) {memset(buf, 32, 6); Serial.print(F("0"));}
@@ -535,7 +545,7 @@ void list_program(boolean instrinhex) {
       if (!instrinhex) {Serial.print(getInstr(bufindex)+String(buf));} else {Serial.print(bufindex, HEX); Serial.print(buf);}
       if (pgm_read_byte_near(params+bufindex)) {hasregs = true;} else {Serial.println("");} instrargs = 0;
     } else {
-      if (bufindex == 76 or bufindex == 71 or (bufindex >= 22 and bufindex <= 27) or (bufindex >= 45 and bufindex <= 46) or (bufindex >= 79 and bufindex <= 80) or (bufindex >= 86 and bufindex <= 90)) {
+      if (bufindex == 76 or bufindex == 71 or (bufindex >= 22 and bufindex <= 27) or (bufindex >= 45 and bufindex <= 46) or (bufindex >= 79 and bufindex <= 80) or (bufindex >= 86 and bufindex <= 91)) {
         if (instrargs == 1) {
           code = word(pRAM[lstprog-1], pRAM[lstprog]);
           if (code < 16) {Serial.print(F("000"));} 
@@ -544,13 +554,13 @@ void list_program(boolean instrinhex) {
           Serial.print(code, HEX);
         }
       } else {
-        if ((hlp_B & 0b10000000) and pgm_read_byte_near(regparams+bufindex)) {
+        if ((hlp_B & 0b10000000) and pgm_read_byte_near(regparams+bufindex) and (pRAM[lstprog-1] != 34 and pRAM[lstprog-1] != 47)) {
           Serial.print(F("r"));
           Serial.print(char(pRAM[lstprog] + 65));
           Serial.print(F(" "));
           instrargs++;
-        } else if ((hlp_B & 0b10000000) and !pgm_read_byte_near(regparams+bufindex) and instrargs == 0) {
-          Serial.print("r");
+        } else if ((hlp_B & 0b10000000) and !pgm_read_byte_near(regparams+bufindex) and pgm_read_byte_near(params+bufindex) > 1 and instrargs == 0  and (pRAM[lstprog-1] != 34 and pRAM[lstprog-1] != 47)) {
+          Serial.print(F("r"));
           Serial.print(char(pRAM[lstprog] + 65));
           Serial.print(F(" "));
           instrargs++;
@@ -566,7 +576,7 @@ void list_program(boolean instrinhex) {
         Serial.println(""); 
         hasregs = false;
       }
-      if (bufindex == 76 or bufindex == 71 or (bufindex >= 22 and bufindex <= 27) or (bufindex >= 45 and bufindex <= 46)or (bufindex >= 79 and bufindex <= 80) or (bufindex >= 86 and bufindex <= 90)) {instrargs++;}
+      if (bufindex == 76 or bufindex == 71 or (bufindex >= 22 and bufindex <= 27) or (bufindex >= 45 and bufindex <= 46)or (bufindex >= 79 and bufindex <= 80) or (bufindex >= 86 and bufindex <= 91)) {instrargs++;}
     }
   }
 }
@@ -635,6 +645,11 @@ void get_input() {
 void edit() {
   word tmp_addr = 0;
   if (addr == 0) {Serial.println(F("Nothing to modify.")); return;}
+
+  Serial.println(F("################################### WARNING! ###################################"));
+  Serial.println(F("## EDIT overwrites memory, entering invalid input is equivalent to using DEL. ##"));
+  Serial.println(F("##          To cancel EDIT enter a larger address then memory size.           ##"));
+  Serial.println(F("################################################################################"));
   
   Serial.print(F("Enter address number: "));
   get_input();
@@ -647,14 +662,14 @@ void edit() {
   get_input();
 
   instrargs = pgm_read_byte_near(params+pRAM[code]);  
-  if (pRAM[code] == 76 or pRAM[code] == 71 or (pRAM[code] >= 22 and pRAM[code] <= 27) or (pRAM[code] >= 45 and pRAM[code] <= 46) or (pRAM[code] >= 79 and pRAM[code] <= 80) or (pRAM[code] >= 86 and pRAM[code] <= 90)) {instrargs++;}
+  if (pRAM[code] == 76 or pRAM[code] == 71 or (pRAM[code] >= 22 and pRAM[code] <= 27) or (pRAM[code] >= 45 and pRAM[code] <= 46) or (pRAM[code] >= 79 and pRAM[code] <= 80) or (pRAM[code] >= 86 and pRAM[code] <= 91)) {instrargs++;}
 
   bufindex = (code + instrargs) + 1;    
-  memcpy(pRAM+code, pRAM+bufindex, addr);
+  memcpy(pRAM+code, pRAM+bufindex, addr-bufindex);
   addr -= (instrargs + 1);
   
   bufidx = code + 3;    
-  memmove(pRAM+bufidx, pRAM+code, addr);
+  memmove(pRAM+bufidx, pRAM+code, addr-code);
   pRAM[code] = 0; pRAM[code+1] = 0; pRAM[code+2] = 0;
 
   tmp_addr = addr;
@@ -668,18 +683,18 @@ void edit() {
 }
 
 // ==================================================================
-// BC256 --Byte Code 256-- INTEPRETER (1.0) "STABLE"
+// BC256 --Byte Code 256-- INTEPRETER (1.7) "STABLE"
 // ==================================================================
 void BC256() {
   // A = [0], B = [1], C = [2], D = [3], ? = [4], ?? = [5], sp = [6], lpt = [7], lpa = [8], lpa = [9], lpc = [10]
   byte regs[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   word progaddr = 0;
-  byte a = 0, b = 0, c = 0, instr = 0, instmu = 0;
+  byte a = 0, b = 0, c = 0, instr = 0;
   
   byte tmpmu[4] = {0, 0 , 0, 0};
   
   #define nxtc() pRAM[progaddr++]
-  static void* labels[]= {&&instr_0,&&instr_1,&&instr_2,&&instr_3,&&instr_4,&&instr_5,&&instr_6,&&instr_7,&&instr_8,&&instr_9,&&instr_10,&&instr_11,&&instr_12,&&instr_13,&&instr_14,&&instr_15,&&instr_16,&&instr_17,&&instr_18,&&instr_19,&&instr_20,&&instr_21,&&instr_22,&&instr_23,&&instr_24,&&instr_25,&&instr_26,&&instr_27,&&instr_28,&&instr_29, &&instr_30,&&instr_31,&&instr_32,&&instr_33,&&instr_34,&&instr_35,&&instr_36,&&instr_37,&&instr_38,&&instr_39,&&instr_40,&&instr_41,&&instr_42,&&instr_43,&&instr_44,&&instr_45,&&instr_46,&&instr_47,&&instr_48,&&instr_49,&&instr_50,&&instr_51,&&instr_52,&&instr_53,&&instr_54,&&instr_55,&&instr_56,&&instr_57,&&instr_58,&&instr_59,&&instr_60,&&instr_61,&&instr_62,&&instr_63,&&instr_64,&&instr_65,&&instr_66,&&instr_67,&&instr_68,&&instr_69,&&instr_70,&&instr_71,&&instr_72,&&instr_73,&&instr_74,&&instr_75,&&instr_76,&&instr_77,&&instr_78,&&instr_79,&&instr_80,&&instr_81,&&instr_82,&&instr_83,&&instr_84,&&instr_85,&&instr_86,&&instr_87,&&instr_88,&&instr_89,&&instr_90};
+  static void* labels[]= {&&instr_0,&&instr_1,&&instr_2,&&instr_3,&&instr_4,&&instr_5,&&instr_6,&&instr_7,&&instr_8,&&instr_9,&&instr_10,&&instr_11,&&instr_12,&&instr_13,&&instr_14,&&instr_15,&&instr_16,&&instr_17,&&instr_18,&&instr_19,&&instr_20,&&instr_21,&&instr_22,&&instr_23,&&instr_24,&&instr_25,&&instr_26,&&instr_27,&&instr_28,&&instr_29, &&instr_30,&&instr_31,&&instr_32,&&instr_33,&&instr_34,&&instr_35,&&instr_36,&&instr_37,&&instr_38,&&instr_39,&&instr_40,&&instr_41,&&instr_42,&&instr_43,&&instr_44,&&instr_45,&&instr_46,&&instr_47,&&instr_48,&&instr_49,&&instr_50,&&instr_51,&&instr_52,&&instr_53,&&instr_54,&&instr_55,&&instr_56,&&instr_57,&&instr_58,&&instr_59,&&instr_60,&&instr_61,&&instr_62,&&instr_63,&&instr_64,&&instr_65,&&instr_66,&&instr_67,&&instr_68,&&instr_69,&&instr_70,&&instr_71,&&instr_72,&&instr_73,&&instr_74,&&instr_75,&&instr_76,&&instr_77,&&instr_78,&&instr_79,&&instr_80,&&instr_81,&&instr_82,&&instr_83,&&instr_84,&&instr_85,&&instr_86,&&instr_87,&&instr_88,&&instr_89,&&instr_90,&&instr_91,&&instr_92};
   #define doinstr() {goto *(labels[instr]);}
      
 run_prog:
@@ -1078,7 +1093,7 @@ run_prog:
       a = nxtc();
       b = nxtc();
       if (regs[a] & (1 << regs[b])) {
-        if (pRAM[progaddr] == 76 or pRAM[progaddr] == 71 or (pRAM[progaddr] >= 22 and pRAM[progaddr] <= 27) or (pRAM[progaddr] >= 45 and pRAM[progaddr] <= 46) or (pRAM[progaddr] >= 79 and pRAM[progaddr] <= 80) or (pRAM[progaddr] >= 86 and pRAM[progaddr] <= 90)) {progaddr+=3;}
+        if (pRAM[progaddr] == 76 or pRAM[progaddr] == 71 or (pRAM[progaddr] >= 22 and pRAM[progaddr] <= 27) or (pRAM[progaddr] >= 45 and pRAM[progaddr] <= 46) or (pRAM[progaddr] >= 79 and pRAM[progaddr] <= 80) or (pRAM[progaddr] >= 86 and pRAM[progaddr] <= 91)) {progaddr+=3;}
         else {progaddr += pgm_read_byte_near(params+pRAM[progaddr]) + 1;}
       }
       goto run_prog;
@@ -1086,7 +1101,7 @@ run_prog:
       a = nxtc();
       b = nxtc();
       if (!(regs[a] & (1 << regs[b]))) {
-        if (pRAM[progaddr] == 76 or pRAM[progaddr] == 71 or (pRAM[progaddr] >= 22 and pRAM[progaddr] <= 27) or (pRAM[progaddr] >= 45 and pRAM[progaddr] <= 46) or (pRAM[progaddr] >= 79 and pRAM[progaddr] <= 80) or (pRAM[progaddr] >= 86 and pRAM[progaddr] <= 90)) {progaddr+=3;}
+        if (pRAM[progaddr] == 76 or pRAM[progaddr] == 71 or (pRAM[progaddr] >= 22 and pRAM[progaddr] <= 27) or (pRAM[progaddr] >= 45 and pRAM[progaddr] <= 46) or (pRAM[progaddr] >= 79 and pRAM[progaddr] <= 80) or (pRAM[progaddr] >= 86 and pRAM[progaddr] <= 91)) {progaddr+=3;}
         else {progaddr += pgm_read_byte_near(params+pRAM[progaddr]) + 1;}
       }
       goto run_prog;
@@ -1229,12 +1244,29 @@ run_prog:
         }
       }
       goto run_prog;
-    instr_91: // => Fast output pin toggling
+    instr_91: // => Jmp to address and save current address to the stack
+      a = nxtc();
+      b = nxtc();
+      
+      c = ram_sizes1 - regs[6];
+      pRAM[c] = progaddr & 0xFF;
+      pRAM[c + 1] = (progaddr >> 8) & 0xFF;
+      regs[6] += 2;
+
+      progaddr = word(a, b);
+      goto run_prog;
+    instr_92: // => Return to address on the stack
+      regs[6]--;
+      a = ram_sizes1 - regs[6];      
+      regs[6]--;
+      b = ram_sizes1 - regs[6];      
+      progaddr = word(pRAM[a], pRAM[b]);
+      goto run_prog;
+    instr_93: // => Fast output pin toggling
       a = nxtc();
       b = nxtc();
       code = word(a, b);
 #if defined(__AVR_ATmega328P__) // Only enable control fast output toggling on ATmega328P
-  
       if (pRAM[code] == 75) {
         c = pRAM[code+1]; code += 2;
         for (byte clrlp = 0; clrlp < c; clrlp++) {
